@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: ytx-downloader
+    env: docker
+    plan: free
+    autoDeploy: true

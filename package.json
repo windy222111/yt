@@ -1,0 +1,14 @@
+{
+  "name": "ytx-downloader-server",
+  "version": "1.0.0",
+  "description": "Ad-free YouTube MP3/MP4 downloader via yt-dlp + ffmpeg",
+  "main": "server.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
