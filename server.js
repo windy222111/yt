@@ -1,13 +1,18 @@
-const express = require("express");
-const cors = require("cors");
-const { spawn } = require("child_process");
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-const crypto = require("crypto");
+import express from "express";
+import cors from "cors";
+import { spawn } from "child_process";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import fetch from "node-fetch";
+import { fileURLToPath } from "url";
+import crypto from "crypto";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 8080; // Cloud defaults to 8080 (Fly/Render can override)
+const PORT = process.env.PORT || 10000; // Render typically binds here
 
 app.use(cors());
 
@@ -31,7 +36,39 @@ function sendAttachment(res, filename) {
   res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
 }
 
-// Stream MP3 using yt-dlp -> ffmpeg pipeline (no temp files)
+let YTDLP_PATH = "yt-dlp"; // default to PATH if present
+
+async function ensureYtDlp() {
+  // Try PATH first
+  const which = spawn("which", ["yt-dlp"]);
+  let pathBuf = "";
+  which.stdout.on("data", (d) => (pathBuf += d.toString()));
+  const ok = await new Promise((resolve) => which.on("close", (code) => resolve(code === 0)));
+  if (ok && pathBuf.trim()) {
+    YTDLP_PATH = pathBuf.trim();
+    return;
+  }
+
+  // Download static binary to tmp
+  const dlURL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp";
+  const outPath = path.join(os.tmpdir(), "yt-dlp");
+  if (!fs.existsSync(outPath)) {
+    console.log("Downloading yt-dlp binary...");
+    const resp = await fetch(dlURL);
+    if (!resp.ok) throw new Error("Failed to download yt-dlp");
+    const fileStream = fs.createWriteStream(outPath, { mode: 0o755 });
+    await new Promise((resolve, reject) => {
+      resp.body.pipe(fileStream);
+      resp.body.on("error", reject);
+      fileStream.on("finish", resolve);
+    });
+    try { fs.chmodSync(outPath, 0o755); } catch {}
+  }
+  YTDLP_PATH = outPath;
+}
+
+await ensureYtDlp();
+
 app.get("/download", async (req, res) => {
   const type = (req.query.type || "mp3").toLowerCase();
   const url = youtubeURLFromParams(req);
@@ -41,13 +78,15 @@ app.get("/download", async (req, res) => {
     res.setHeader("Content-Type", "audio/mpeg");
     sendAttachment(res, "audio.mp3");
 
-    const ytdlp = spawnChecked("yt-dlp", ["-f", "bestaudio/best", "-o", "-", url], { stdio: ["ignore", "pipe", "inherit"] });
+    const ytdlp = spawnChecked(YTDLP_PATH, ["-f", "bestaudio/best", "-o", "-", url], { stdio: ["ignore", "pipe", "inherit"] });
     const ffmpeg = spawnChecked("ffmpeg", ["-i", "pipe:0", "-vn", "-acodec", "libmp3lame", "-b:a", "192k", "-f", "mp3", "pipe:1"], { stdio: ["pipe", "pipe", "inherit"] });
 
     ytdlp.stdout.pipe(ffmpeg.stdin);
     ffmpeg.stdout.pipe(res);
 
-    ffmpeg.on("close", () => res.end());
+    ffmpeg.on("close", (code) => {
+      try { res.end(); } catch {}
+    });
     return;
   }
 
@@ -62,7 +101,7 @@ app.get("/download", async (req, res) => {
       "-o", outPath,
       url
     ];
-    const proc = spawnChecked("yt-dlp", args, { stdio: ["ignore", "inherit", "inherit"] });
+    const proc = spawnChecked(YTDLP_PATH, args, { stdio: ["ignore", "inherit", "inherit"] });
 
     proc.on("close", (code) => {
       if (code !== 0 || !fs.existsSync(outPath)) {

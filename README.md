@@ -1,36 +1,15 @@
-# Cloud deployment (no localhost)
-Deploy the ad-free yt-dlp + ffmpeg downloader to your own cloud URL.
+# ytx-downloader-render (no Docker)
+For Render/Heroku-like Node buildpacks where `yt-dlp` isn't preinstalled.
 
-## Option A — Google Cloud Run (Quick)
-```bash
-gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
+## Deploy (Render)
+1. Tạo repo mới trên GitHub, upload toàn bộ nội dung folder này.
+2. Render → New Web Service → Connect repo → Build Command: (mặc định) → Start Command: `node server.js`
+3. Render sẽ đặt PORT (vd: 10000); server bind `process.env.PORT` tự động.
 
-gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/ytx-downloader
-gcloud run deploy ytx-downloader   --image gcr.io/YOUR_PROJECT_ID/ytx-downloader   --platform managed --allow-unauthenticated --memory 1Gi --region asia-southeast1   --port 8080
-# Note the HTTPS URL returned, e.g. https://ytx-downloader-xxxxx-uc.a.run.app
-```
-
-## Option B — Fly.io (Free allowances)
-```bash
-# Install: https://fly.io/docs/hands-on/install-flyctl/
-flyctl auth signup
-flyctl launch --no-deploy  # generates app name from fly.toml or prompt
-flyctl deploy
-# App URL looks like: https://ytx-downloader.fly.dev
-```
-
-## Option C — Render (Free tier)
-- Connect this repo to Render, pick **Docker** environment, and the `render.yaml` will provision a free web service.
-- URL like: https://ytx-downloader.onrender.com
-
-## Option D — Railway
-- Create New Project → Deploy from GitHub → Dockerfile auto-build → set service to **web** (port 8080).
+## Requirements
+- `ffmpeg` có sẵn trên Render (Debian image). Nếu thiếu, hãy chuyển sang bản Docker hoặc Cloud Run.
 
 ## Test
-```
-curl -I "https://YOUR-URL/download?v=dQw4w9WgXcQ&type=mp3"
-curl -I "https://YOUR-URL/download?v=dQw4w9WgXcQ&type=mp4"
-```
-
-Then set your extension **Downloader Endpoint** to that URL.
+- `/health`
+- `/download?v=<VIDEO_ID>&type=mp3`
+- `/download?v=<VIDEO_ID>&type=mp4`
